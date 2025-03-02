@@ -1,4 +1,4 @@
-import { useMetaChatStore } from "@/store/chatStore";
+import { useMetaChatStore } from "@/store/SearchChats";
 import { History, Plus } from "lucide-react"
 
 const chatData = {

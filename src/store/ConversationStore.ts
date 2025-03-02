@@ -1,30 +1,31 @@
+// store/ConversationStore.ts
+import { create } from "zustand";
+import { devtools, persist } from "zustand/middleware";
 
-import { create } from 'zustand'
-import { devtools, persist } from 'zustand/middleware'
-
-export type Role = 'user' | 'assistant'
+export type Role = "user" | "assistant";
 
 export interface Conversation {
-  id: string
-  content: string
-  role: Role
-  timestamp: string
-  chatId: string
+  id: string;
+  content: string;
+  role: Role;
+  timestamp: string;
+  chatId: string;
 }
 
 interface ConversationState {
-  conversations: Conversation[]
-  currentChatId: string | null
-  isLoading: boolean
-  error: string | null
-  
-  // Actions
-  setCurrentChatId: (chatId: string) => void
-  fetchConversations: (chatId: string) => Promise<void>
-  addConversation: (conversation: Conversation) => void
-  addUserMessage: (content: string) => Promise<void>
-  addAssistantMessage: (content: string) => void
-  clearConversations: () => void
+  conversations: Conversation[];
+  currentChatId: string | null;
+  isLoading: boolean;
+  error: string | null;
+  streamingMessageId: string | null; // New field
+
+  setCurrentChatId: (chatId: string) => void;
+  fetchConversations: (chatId: string) => Promise<void>;
+  addConversation: (conversation: Conversation) => void;
+  addUserMessage: (content: string) => Promise<void>;
+  addAssistantMessage: (content: string) => void;
+  updateAssistantMessageStream: (content: string) => void;
+  clearConversations: () => void;
 }
 
 const useConversationStore = create<ConversationState>()(
@@ -35,125 +36,96 @@ const useConversationStore = create<ConversationState>()(
         currentChatId: null,
         isLoading: false,
         error: null,
-        
+        streamingMessageId: null,
+
         setCurrentChatId: (chatId) => set({ currentChatId: chatId }),
-        
+
         fetchConversations: async (chatId) => {
-          set({ isLoading: true, error: null })
+          set({ isLoading: true, error: null });
           try {
-            const response = await fetch(`/api/conversations/${chatId}`)
-            if (!response.ok) throw new Error('Failed to fetch conversations')
-            
-            const data = await response.json()
-            set({ conversations: data, currentChatId: chatId, isLoading: false })
+            const response = await fetch(`/api/conversations/${chatId}`);
+            if (!response.ok) throw new Error("Failed to fetch conversations");
+            const data = await response.json();
+            set({ conversations: data, currentChatId: chatId, isLoading: false, streamingMessageId: null });
           } catch (error) {
-            set({ 
-              error: error instanceof Error ? error.message : 'Unknown error',
-              isLoading: false 
-            })
+            set({
+              error: error instanceof Error ? error.message : "Unknown error",
+              isLoading: false,
+            });
           }
         },
-        
-        addConversation: (conversation) => {
-          set((state) => ({
-            conversations: [...state.conversations, conversation]
-          }))
-        },
-        
+
         addUserMessage: async (content) => {
-          const { currentChatId } = get()
-          if (!currentChatId) return
-          
-          // Optimistically update UI
-          const tempId = Date.now().toString()
+          const { currentChatId } = get();
+          if (!currentChatId) throw new Error("No current chat ID");
           const userMessage: Conversation = {
-            id: tempId,
+            id: Date.now().toString(),
             content,
-            role: 'user',
+            role: "user",
             timestamp: new Date().toISOString(),
-            chatId: currentChatId
-          }
-          
+            chatId: currentChatId,
+          };
           set((state) => ({
-            conversations: [...state.conversations, userMessage]
-          }))
-          
-          // Send to backend
-          try {
-            const response = await fetch('/api/conversations', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(userMessage)
-            })
-            
-            if (!response.ok) throw new Error('Failed to save message')
-            
-            // Could update with the actual ID from server if needed
-            const savedMessage = await response.json()
-            
-            // Handle AI response - this could be in a separate function
-            // but keeping it here for simplicity
-            set({ isLoading: true })
-            const aiResponse = await fetch('/api/ai-response', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ 
-                message: content, 
-                chatId: currentChatId 
-              })
-            })
-            
-            if (!aiResponse.ok) throw new Error('Failed to get AI response')
-            
-            const aiMessageData = await aiResponse.json()
-            get().addAssistantMessage(aiMessageData.content)
-            
-          } catch (error) {
-            set({ 
-              error: error instanceof Error ? error.message : 'Unknown error',
-              isLoading: false 
-            })
-          }
+            conversations: [...state.conversations, userMessage],
+          }));
         },
-        
+
         addAssistantMessage: (content) => {
-          const { currentChatId } = get()
-          if (!currentChatId) return
-          
+          const { currentChatId } = get();
+          if (!currentChatId) return;
           const assistantMessage: Conversation = {
             id: Date.now().toString(),
             content,
-            role: 'assistant',
+            role: "assistant",
             timestamp: new Date().toISOString(),
-            chatId: currentChatId
-          }
-          
+            chatId: currentChatId,
+          };
           set((state) => ({
             conversations: [...state.conversations, assistantMessage],
-            isLoading: false
-          }))
-          
-          // You might want to save this to the backend as well
-          fetch('/api/conversations', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(assistantMessage)
-          }).catch(error => {
-            console.error('Failed to save assistant message:', error)
-          })
+            isLoading: false,
+          }));
         },
-        
-        clearConversations: () => set({ conversations: [] })
+
+        updateAssistantMessageStream: (content) => {
+          const { currentChatId, conversations } = get();
+          if (!currentChatId) return;
+
+          const lastMessage = conversations[conversations.length - 1];
+          if (lastMessage && lastMessage.role === "assistant" && get().streamingMessageId === lastMessage.id) {
+            set((state) => ({
+              conversations: [
+                ...state.conversations.slice(0, -1),
+                { ...lastMessage, content: lastMessage.content + content },
+              ],
+            }));
+          } else {
+            const assistantMessage: Conversation = {
+              id: Date.now().toString(),
+              content,
+              role: "assistant",
+              timestamp: new Date().toISOString(),
+              chatId: currentChatId,
+            };
+            set((state) => ({
+              conversations: [...state.conversations, assistantMessage],
+              streamingMessageId: assistantMessage.id,
+            }));
+          }
+        },
+
+        addConversation: (conversation) =>
+          set((state) => ({
+            conversations: [...state.conversations, conversation],
+          })),
+
+        clearConversations: () => set({ conversations: [], streamingMessageId: null }),
       }),
       {
-        name: 'conversation-storage',
-        partialize: (state) => ({ 
-          currentChatId: state.currentChatId 
-          // Only persist what's necessary, conversations will be loaded from API
-        })
+        name: "conversation-storage",
+        partialize: (state) => ({ currentChatId: state.currentChatId }),
       }
     )
   )
-)
+);
 
-export default useConversationStore
+export default useConversationStore;

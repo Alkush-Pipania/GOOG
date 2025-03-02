@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
-import { useAuth } from "@clerk/nextjs";
+import {  Suspense } from "react";
 import DeepseekChatInput from "./ChatInput";
 import { useMediaQuery } from "@/hooks/use-media-query";
 

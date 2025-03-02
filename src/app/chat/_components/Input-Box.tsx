@@ -1,29 +1,28 @@
-"use client"
-import { ArrowUp, Square } from 'lucide-react'
-import React, { useState } from 'react'
-import TextareaAutosize from 'react-textarea-autosize'
+// components/InputBox.tsx
+"use client";
+import { ArrowUp, Square, X } from "lucide-react";
+import React, { useState } from "react";
+import TextareaAutosize from "react-textarea-autosize";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
 import { Form, FormControl, FormField, FormItem } from "@/components/ui/form";
-import axios from 'axios';
-import { useAuth } from '@clerk/nextjs';
-import useConversationStore from '@/store/ConversationStore';
-import { useResponseLoadStore } from '@/store/ChatStore';
+import { useAuth } from "@clerk/nextjs";
+import useConversationStore from "@/store/ConversationStore";
+import { useResponseLoadStore } from "@/store/ChatStore";
 
 const formSchema = z.object({
   message: z.string().min(1, { message: "Message cannot be empty" }),
-  promptType: z.union([z.literal("normal"), z.literal("deepthink")]),
+  promptType: z.union([z.literal("normal"), z.literal("detailed")]), // Changed "deepthink" to "detailed" to match backend
 });
 
 type FormValues = z.infer<typeof formSchema>;
 
-const InputBox = ({ isMobile, id }: { isMobile: boolean, id: string }) => {
-  const [deepThink, setDeepThink] = useState<boolean>(false)
+const InputBox = ({ isMobile, id }: { isMobile: boolean; id: string }) => {
+  const [deepThink, setDeepThink] = useState<boolean>(false);
   const { getToken } = useAuth();
-  const {addUserMessage , addAssistantMessage} = useConversationStore();
-  const { isLoading , setLoading} = useResponseLoadStore();
-
+  const { addUserMessage, updateAssistantMessageStream, fetchConversations } = useConversationStore();
+  const { isloaded, setLoading } = useResponseLoadStore();
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -33,31 +32,56 @@ const InputBox = ({ isMobile, id }: { isMobile: boolean, id: string }) => {
   const onSubmit = async (values: FormValues) => {
     try {
       form.reset();
-      const token = await getToken(); 
-      addUserMessage(values.message)
-      setLoading(true)
-      const response = await axios.post(
-        "/api/chat", 
-        {
-          userInput: values.message,
-          promptType: values.promptType,
-          chatId : id,
+      const token = await getToken();
+      addUserMessage(values.message);
+      setLoading(true);
+
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
         },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
+        body: JSON.stringify({
+          userInput: values.message,
+          promptType: deepThink ? "detailed" : "normal",
+          chatId: id,
+        }),
+      });
+
+      if (!response.ok) throw new Error(`Failed to fetch stream: ${response.statusText}`);
+
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error("No readable stream");
+
+      const decoder = new TextDecoder();
+      let accumulatedResponse = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+          // Streaming complete, fetch the latest conversations to get the formatted response
+          await fetchConversations(id);
+          break;
         }
-      );
-      setLoading(false)
-      console.log("Response:", response.data.result);
+        const chunk = decoder.decode(value, { stream: true });
+        accumulatedResponse += chunk;
+        updateAssistantMessageStream(chunk); // Stream raw text temporarily
+      }
+
+      setLoading(false);
     } catch (error) {
       console.error("Error in handleChat:", error);
+      updateAssistantMessageStream(
+        `\n**Error:** ${error instanceof Error ? error.message : "An unexpected error occurred"}`
+      );
+      setLoading(false);
+      await fetchConversations(id); // Still fetch to ensure state sync
     }
-    
   };
+
   return (
+    <>
     <div className={`w-full max-w-4xl mx-auto px-4 ${isMobile ? "fixed bottom-0 left-0 right-0 pb-4 z-50 backdrop-blur-sm" : "pb-4"}`}>
       <div className="hover:bg-InputBG border border-gray-600 bg-InputBG/90 duration-150 ease-in-out rounded-2xl p-3 shadow-lg">
         <Form {...form}>
@@ -76,6 +100,12 @@ const InputBox = ({ isMobile, id }: { isMobile: boolean, id: string }) => {
                         maxRows={6}
                         placeholder="How can GOOG help?"
                         className="w-full bg-transparent resize-none custom-scrollbar text-gray-200 text-lg font-Quan py-2 px-1 outline-none border-none"
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" && !event.shiftKey) {
+                            event.preventDefault();
+                            form.handleSubmit(onSubmit)();
+                          }
+                        }}
                       />
                     </FormControl>
                   </FormItem>
@@ -85,7 +115,7 @@ const InputBox = ({ isMobile, id }: { isMobile: boolean, id: string }) => {
                 <div className="flex items-center gap-2 flex-wrap">
                   <button
                     onClick={() => {
-                      form.setValue("promptType", form.getValues("promptType") === "normal" ? "deepthink" : "normal");
+                      form.setValue("promptType", deepThink ? "normal" : "detailed");
                       setDeepThink(!deepThink);
                     }}
                     type="button"
@@ -103,10 +133,9 @@ const InputBox = ({ isMobile, id }: { isMobile: boolean, id: string }) => {
                   <button
                     type="submit"
                     className="p-2 bg-gray-800/70 cursor-pointer hover:bg-gray-700/70 rounded-full transition-colors"
-                    disabled={!form.formState.isValid}
+                    disabled={!form.formState.isValid || isloaded}
                   >
-                    {isLoading ? (<Square className="w-5 h-5 text-gray-200" />):(<ArrowUp className="w-5 h-5 text-gray-200" />)}
-                    
+                    {isloaded ? <Square className="w-5 h-5 text-gray-200" /> : <ArrowUp className="w-5 h-5 text-gray-200" />}
                   </button>
                 </div>
               </div>
@@ -115,7 +144,8 @@ const InputBox = ({ isMobile, id }: { isMobile: boolean, id: string }) => {
         </Form>
       </div>
     </div>
-  )
-}
+    </>
+  );
+};
 
-export default InputBox
+export default InputBox;

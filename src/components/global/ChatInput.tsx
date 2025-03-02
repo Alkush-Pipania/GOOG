@@ -29,8 +29,7 @@ export default function DeepseekChatInput() {
 
   const onSubmit = async (values: FormValues) => {
     try {
-      const token = await getToken(); // Fix 1: Await token
-      console.log("Posting to: /api/chat", { token }); // Debug
+      const token = await getToken(); 
       const response = await axios.post(
         "/api/chat", // Fix 2: Relative URL
         { userInput: values.message, promptType: values.promptType },
@@ -74,6 +73,12 @@ export default function DeepseekChatInput() {
                         maxRows={6}
                         placeholder="How can GOOG help?"
                         className="w-full bg-transparent resize-none custom-scrollbar text-gray-200 text-lg font-Quan py-2 px-1 outline-none border-none"
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" && !event.shiftKey) {
+                            event.preventDefault();
+                            form.handleSubmit(onSubmit)();
+                          }
+                        }}
                       />
                     </FormControl>
                   </FormItem>
