@@ -1,0 +1,64 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+
+model User {
+  id          String   @id @default(uuid())
+  firstName   String
+  lastName    String
+  email       String   @unique
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  chats       Chat[]
+  settings    UserSettings?
+}
+
+// Chat model to represent individual chat sessions
+model Chat {
+  id          String        @id @default(uuid())
+  title       String
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  userId      String
+  user        User          @relation(fields: [userId], references: [id])
+
+  // Each chat contains multiple conversations
+  conversations Conversation[]
+}
+
+// Conversation model to store individual messages in a chat
+model Conversation {
+  id        String   @id @default(uuid())
+  content   String
+  role      Role     @default(user)
+  timestamp DateTime @default(now())
+  chatId    String
+  chat      Chat     @relation(fields: [chatId], references: [id])
+}
+
+enum Role {
+  user
+  assistant
+}
+
+// User settings model for storing user preferences
+model UserSettings {
+  id                String   @id @default(uuid())
+  userId            String   @unique
+  user              User     @relation(fields: [userId], references: [id])
+  detailedPrompts   Boolean  @default(false) // Preference for detailed or simple prompts
+}
