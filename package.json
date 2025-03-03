@@ -4,15 +4,12 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
-    "build": "next build",
+    "build": "npm install --legacy-peer-deps && next build",
     "start": "next start",
     "lint": "next lint"
   },
   "dependencies": {
     "@ai-sdk/openai": "^1.1.15",
-    "@assistant-ui/react": "^0.8.2",
-    "@assistant-ui/react-ai-sdk": "^0.8.0",
-    "@assistant-ui/react-markdown": "^0.8.0",
     "@clerk/nextjs": "^6.12.1",
     "@clerk/themes": "^2.2.20",
     "@hookform/resolvers": "^4.1.2",
