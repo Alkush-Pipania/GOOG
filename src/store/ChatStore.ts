@@ -20,3 +20,14 @@ export const useResponseLoadStore = create<LoadProp>((set)=>({
   setLoading : (isloaded : boolean) => set({isloaded})
 }))
 
+
+interface MsgProp{
+  sent : boolean;
+  setSentStatus : (open : boolean) => void;
+}
+
+export const useMsgSentStore = create<MsgProp>((set)=>({
+  sent : false,
+  setSentStatus : (sent : boolean) => set({sent})
+}))
+

@@ -35,13 +35,7 @@ export default async function Home() {
     return greetingText;
   };
   return (
-    <main className="flex min-h-screen flex-col bg-GoogBG text-white">
-      <Header userid={userId} />
-
-      <div className="flex-1 flex flex-col items-center justify-center px-4">
-        <ChatInterface greetings={getGreeting(users)} />
-      </div>
-    </main>
+    <ChatInterface userid={userId} greetings={getGreeting(users)}/>
   )
 }
 

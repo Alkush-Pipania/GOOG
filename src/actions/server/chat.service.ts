@@ -7,7 +7,7 @@ import { Role } from "@prisma/client";
 import { UpstashVectorStore } from "@langchain/community/vectorstores/upstash";
 import { Index } from "@upstash/vector";
 import prisma from "@/lib/prisma";
-import { PassThrough } from "stream"; // Node.js stream for manual streaming
+import { PassThrough } from "stream"; 
 import { MessageContent } from "@langchain/core/messages";
 
 export class ChatService {

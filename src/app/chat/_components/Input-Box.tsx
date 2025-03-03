@@ -9,7 +9,7 @@ import * as z from "zod";
 import { Form, FormControl, FormField, FormItem } from "@/components/ui/form";
 import { useAuth } from "@clerk/nextjs";
 import useConversationStore from "@/store/ConversationStore";
-import { useResponseLoadStore } from "@/store/ChatStore";
+import { useMsgSentStore, useResponseLoadStore } from "@/store/ChatStore";
 
 const formSchema = z.object({
   message: z.string().min(1, { message: "Message cannot be empty" }),

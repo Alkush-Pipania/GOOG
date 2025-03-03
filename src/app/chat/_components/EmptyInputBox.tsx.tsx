@@ -1,35 +1,28 @@
+// components/InputBox.tsx
 "use client";
-
-import { useState, useEffect } from "react";
-import { ArrowUp } from "lucide-react";
+import { ArrowUp, Square, X } from "lucide-react";
+import React, { useState } from "react";
+import TextareaAutosize from "react-textarea-autosize";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
 import { Form, FormControl, FormField, FormItem } from "@/components/ui/form";
-import TextareaAutosize from "react-textarea-autosize";
-import axios from "axios";
 import { useAuth } from "@clerk/nextjs";
-import { CreateChat } from "@/hooks/newChat";
-import { useRouter } from "next/navigation";
-import { usePathname } from "next/navigation";
-import { useMsgSentStore, useResponseLoadStore } from "@/store/ChatStore";
 import useConversationStore from "@/store/ConversationStore";
+import { useResponseLoadStore } from "@/store/ChatStore";
 
 const formSchema = z.object({
   message: z.string().min(1, { message: "Message cannot be empty" }),
-  promptType: z.union([z.literal("normal"), z.literal("deepthink")]),
+  promptType: z.union([z.literal("normal"), z.literal("detailed")]), // Changed "deepthink" to "detailed" to match backend
 });
 
 type FormValues = z.infer<typeof formSchema>;
 
-export default function DeepseekChatInput() {
-  const [isMobile, setIsMobile] = useState(false);
+const InputBoxy= ({ isMobile }: { isMobile: boolean; }) => {
   const [deepThink, setDeepThink] = useState<boolean>(false);
-  const { setLoading } = useResponseLoadStore()
-  const {addUserMessage} = useConversationStore()
   const { getToken } = useAuth();
-  const {setSentStatus} = useMsgSentStore();
-  const router = useRouter()
+  const { addUserMessage, updateAssistantMessageStream, fetchConversations } = useConversationStore();
+  const { isloaded, setLoading } = useResponseLoadStore();
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -37,57 +30,46 @@ export default function DeepseekChatInput() {
   });
 
   const onSubmit = async (values: FormValues) => {
-    async function getResponse(){
-      setSentStatus(true)
-    form.reset();
-    const token = await getToken();
     try {
-      addUserMessage(values.message)
-      setLoading(true);
-      const response = await axios.post(
-        "/api/create-api", 
-        {}, 
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        }
-      );
-      const { chatId } = response.data;
-      router.push(`/chat/${chatId}?prompt=${encodeURIComponent(values.message)}&type=${values.promptType}`);
       form.reset();
+      const token = await getToken();
+      addUserMessage(values.message);
+      setLoading(true);
 
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          userInput: values.message,
+          promptType: deepThink ? "detailed" : "normal"
+        }),
+      });
 
-      // const response = await fetch("/api/chat", {
-      //   method: "POST",
-      //   headers: {
-      //     Authorization: `Bearer ${token}`,
-      //     "Content-Type": "application/json",
-      //   },
-      //   body: JSON.stringify({
-      //     userInput: values.message,
-      //     promptType: deepThink ? "detailed" : "normal",
-      //     chatId: chatId,
-      //   }),
-      // });
+      if (!response.ok) throw new Error(`Failed to fetch stream: ${response.statusText}`);
 
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error("No readable stream");
+
+      const decoder = new TextDecoder();
+      let accumulatedResponse = "";
+      console.log(response)
+      
+
+      setLoading(false);
     } catch (error) {
       console.error("Error in handleChat:", error);
+      updateAssistantMessageStream(
+        `\n**Error:** ${error instanceof Error ? error.message : "An unexpected error occurred"}`
+      );
+      setLoading(false);
     }
-    form.reset();
-    }
-    getResponse();
   };
 
-  useEffect(() => {
-    const checkIfMobile = () => setIsMobile(window.innerWidth < 768);
-    checkIfMobile();
-    window.addEventListener("resize", checkIfMobile);
-    return () => window.removeEventListener("resize", checkIfMobile);
-  }, []);
-
   return (
+    <>
     <div className={`w-full max-w-4xl mx-auto px-4 ${isMobile ? "fixed bottom-0 left-0 right-0 pb-4 z-50 backdrop-blur-sm" : "pb-4"}`}>
       <div className="hover:bg-InputBG border border-gray-600 bg-InputBG/90 duration-150 ease-in-out rounded-2xl p-3 shadow-lg">
         <Form {...form}>
@@ -121,7 +103,7 @@ export default function DeepseekChatInput() {
                 <div className="flex items-center gap-2 flex-wrap">
                   <button
                     onClick={() => {
-                      form.setValue("promptType", form.getValues("promptType") === "normal" ? "deepthink" : "normal");
+                      form.setValue("promptType", deepThink ? "normal" : "detailed");
                       setDeepThink(!deepThink);
                     }}
                     type="button"
@@ -139,9 +121,9 @@ export default function DeepseekChatInput() {
                   <button
                     type="submit"
                     className="p-2 bg-gray-800/70 cursor-pointer hover:bg-gray-700/70 rounded-full transition-colors"
-                    disabled={!form.formState.isValid}
+                    disabled={!form.formState.isValid || isloaded}
                   >
-                    <ArrowUp className="w-5 h-5 text-gray-200" />
+                    {isloaded ? <Square className="w-5 h-5 text-gray-200" /> : <ArrowUp className="w-5 h-5 text-gray-200" />}
                   </button>
                 </div>
               </div>
@@ -150,5 +132,8 @@ export default function DeepseekChatInput() {
         </Form>
       </div>
     </div>
+    </>
   );
-}
+};
+
+export default InputBoxy;

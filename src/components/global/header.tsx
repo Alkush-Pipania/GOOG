@@ -13,7 +13,7 @@ export default function Header({ userid }: { userid: string | null }) {
   const { isLoaded } = useUser();
 
   return (
-    <header className="w-full p-4 flex items-center justify-between">
+    <header className="w-full p-4 flex fixed top-0 items-center justify-between">
       <Link href="/" className="flex items-center gap-2">
         <span className="text-xl font-medium hidden md:inline-block">GOOG</span>
       </Link>
@@ -21,9 +21,9 @@ export default function Header({ userid }: { userid: string | null }) {
       <div className="flex items-center gap-2">
         {userid ? (
           <>
-            <Button variant="ghost" size="icon" className=" cursor-pointer rounded-full hover:bg-zinc-700 hover:text-white">
+            {/* <Button variant="ghost" size="icon" className=" cursor-pointer rounded-full hover:bg-zinc-700 hover:text-white">
               <Settings size={20} className="" />
-            </Button>
+            </Button> */}
             <HoverCard openDelay={3} closeDelay={3} >
               <HoverCardTrigger>
                 <Button className='hover:bg-zinc-700 bg-transparent cursor-pointer duration-150 ease-in-out rounded-full'>
