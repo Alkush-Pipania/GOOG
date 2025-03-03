@@ -5,7 +5,10 @@ import React from 'react'
 
 const Signin = () => {
   return (
-    <SignIn/>
+    <div className='flex items-start sm:items-center  h-screen justify-center'>
+      <SignIn/>
+    </div>
+    
   )
 }
 

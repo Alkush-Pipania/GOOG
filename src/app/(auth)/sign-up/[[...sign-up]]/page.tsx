@@ -5,7 +5,9 @@ import React from 'react'
 
 const Signup = () => {
   return (
-    <SignUp/>
+   <div className='flex items-start sm:items-center  h-screen justify-center'>
+     <SignUp/>
+   </div>
   )
 }
 

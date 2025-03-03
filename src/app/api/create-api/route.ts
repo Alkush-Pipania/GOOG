@@ -16,6 +16,7 @@ export async function POST(request: NextRequest) {
         title: "New Chat",
       },
     });
+    console.log(chat)
     return NextResponse.json({ chatId: chat.id }, { status: 201 });
   } catch (error) {
     console.error("Error creating chat:", error);
