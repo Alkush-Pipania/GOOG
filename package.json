@@ -15,7 +15,7 @@
     "@langchain/community": "^0.3.34",
     "@langchain/core": "^0.3.42",
     "@langchain/google-genai": "^0.1.10",
-    "@prisma/client": "^5.12.0",
+    "@prisma/client": "^5.22.0",
     "@radix-ui/react-dialog": "^1.1.6",
     "@radix-ui/react-hover-card": "^1.1.6",
     "@radix-ui/react-label": "^2.1.2",
@@ -46,7 +46,7 @@
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "postcss": "^8",
-    "prisma": "^5.12.0",
+    "prisma": "^5.22.0",
     "tailwindcss": "^3.4.1",
     "typescript": "^5"
   }
