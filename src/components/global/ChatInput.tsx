@@ -10,7 +10,6 @@ import TextareaAutosize from "react-textarea-autosize";
 import axios from "axios";
 import { useAuth } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
-import { usePathname } from "next/navigation";
 import { useMsgSentStore, useResponseLoadStore } from "@/store/ChatStore";
 import useConversationStore from "@/store/ConversationStore";
 
