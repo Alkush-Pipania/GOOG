@@ -42,18 +42,58 @@ export async function POST(req: NextRequest) {
 
     // If userInput is provided, process it
     if (userInput) {
-      const stream: any = await chatService.processUserInput({
-        userInput,
-        promptType,
-        userId,
-        chatId: finalChatId,
-      });
-      return new Response(stream, {
-        headers: {
-          "Content-Type": "text/plain; charset=utf-8",
-          "Transfer-Encoding": "chunked",
-        },
-      });
+      try {
+        const stream: any = await chatService.processUserInput({
+          userInput,
+          promptType,
+          userId,
+          chatId: finalChatId,
+        });
+
+        // Create a TransformStream to handle the response
+        const encoder = new TextEncoder();
+        const streamResponse = new ReadableStream({
+          async start(controller) {
+            try {
+              stream.on('data', (chunk: string) => {
+                controller.enqueue(encoder.encode(chunk));
+              });
+
+              stream.on('end', () => {
+                controller.close();
+              });
+
+              stream.on('error', (error: Error) => {
+                console.error('Stream error:', error);
+                controller.error(error);
+              });
+            } catch (error) {
+              console.error('Stream processing error:', error);
+              controller.error(error);
+            }
+          }
+        });
+
+        return new Response(streamResponse, {
+          headers: {
+            'Content-Type': 'text/plain; charset=utf-8',
+            'Transfer-Encoding': 'chunked',
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+          },
+        });
+      } catch (error) {
+        console.error('Error processing user input:', error);
+        return new Response(
+          JSON.stringify({ error: 'Failed to process request' }), 
+          { 
+            status: 500,
+            headers: {
+              'Content-Type': 'application/json',
+            }
+          }
+        );
+      }
     }
 
     // If no userInput, return the chatId for redirection

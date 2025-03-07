@@ -104,11 +104,11 @@ const InputBox = ({ isMobile, id }: { isMobile: boolean; id: string }) => {
     <>
       {/* Disclaimer */}
       {showDisclaimer && (
-        <div className="w-full max-w-4xl mx-auto px-4 mb-4">
-          <div className="bg-black/30 rounded-lg p-3 backdrop-blur-sm border border-gray-700/50 flex items-center justify-between gap-4">
-            <div className="flex items-center gap-2">
-              <AlertCircle className="w-5 h-5 text-yellow-400 flex-shrink-0" />
-              <p className="text-gray-300 text-sm">
+        <div className="w-full max-w-4xl mx-auto px-2 sm:px-4 mb-2 sm:mb-4">
+          <div className="bg-black/30 rounded-lg p-2 sm:p-3 backdrop-blur-sm border border-gray-700/50 flex items-center justify-between gap-2 sm:gap-4">
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 text-yellow-400 flex-shrink-0" />
+              <p className="text-gray-300 text-xs sm:text-sm">
                 {disclaimerMessages[currentDisclaimer]}
               </p>
             </div>
@@ -116,7 +116,7 @@ const InputBox = ({ isMobile, id }: { isMobile: boolean; id: string }) => {
               onClick={() => setShowDisclaimer(false)}
               className="p-1 hover:bg-gray-700/50 rounded-full transition-colors"
             >
-              <X className="w-4 h-4 text-gray-400" />
+              <X className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-400" />
             </button>
           </div>
         </div>
