@@ -9,7 +9,7 @@ import axios from "axios"
 import Loader from "./Loader"
 import { useDialogStore, useMetaChatStore } from "@/store/SearchChats"
 import { dark } from "@clerk/themes"
-import { UseSearchStore } from "@/store/ChatStore"
+import { CreatingChatStore, UseSearchStore } from "@/store/ChatStore"
 
 const COLOR = "#FFFFFF"
 const HIT_COLOR = "#333333"
@@ -422,6 +422,7 @@ export function PromptingIsAllYouNeed({ token, userid }: { token: string | null,
   }, [])
   const { setGroupedChats } = useMetaChatStore();
   const {open , setOpen} = useDialogStore();
+  const {creating , setCreate} = CreatingChatStore();
 
   useEffect(() => {
     async function fetchChats() {
@@ -456,14 +457,19 @@ export function PromptingIsAllYouNeed({ token, userid }: { token: string | null,
             <Button
               className="bg-primary  hover:bg-primary/90 hover:text-white cursor-pointer text-white/90 font-medium px-6 py-6">
               {isloading ? (
-                <Loader />
+               <div 
+                className="flex items-center justify-center">
+                <Loader/>
+              </div>
               ) : (
                 <div onClick={async () => {
                   try {
+                    setCreate(true)
                     setLoading(true);
                     const res = await axios.post('/api/create-api');
                     router.push(`/chat/${res.data.chatId}`);
-                    setLoading(false)
+                    setLoading(false);
+                    setCreate(false)
 
                   } catch (e) {
                     alert('some error coming up');

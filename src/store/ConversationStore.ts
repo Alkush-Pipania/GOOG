@@ -26,6 +26,7 @@ interface ConversationState {
   addAssistantMessage: (content: string) => void;
   updateAssistantMessageStream: (content: string) => void;
   clearConversations: () => void;
+  resetConversations: () => void;
 }
 
 const useConversationStore = create<ConversationState>()(
@@ -119,6 +120,13 @@ const useConversationStore = create<ConversationState>()(
           })),
 
         clearConversations: () => set({ conversations: [], streamingMessageId: null }),
+        resetConversations: () => set({ 
+          conversations: [], 
+          currentChatId: null, 
+          isLoading: false, 
+          error: null, 
+          streamingMessageId: null 
+        }),
       }),
       {
         name: "conversation-storage",
