@@ -68,6 +68,31 @@ export async function POST(req: Request) {
       return new Response("Database error", { status: 500 });
     }
   }
+  if(payload.type === "user.updated") {
+    const { id, email_addresses, first_name, last_name } = payload.data;
+    const email = email_addresses[0]?.email_address;
+    const updatedAt = new Date(payload.data.updated_at); // Convert timestamp to Date
+
+    console.log("Syncing user:", { id, email, first_name, last_name, updatedAt });
+
+    try {
+      await prisma.user.update({
+        where: { id },
+        data: {
+          email,
+          firstName: first_name,
+          lastName: last_name,
+          updatedAt,
+        },
+        
+      });
+      console.log("User synced successfully");
+      return new Response("User synced", { status: 200 });
+    } catch (dbErr) {
+      console.log("Database error:", dbErr);
+      return new Response("Database error", { status: 500 });
+    }
+  }
 
   return new Response("Event ignored", { status: 200 });
 }
