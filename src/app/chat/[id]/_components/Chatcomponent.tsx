@@ -229,7 +229,7 @@ function Chatcomponent({ greetings }: { greetings: string }) {
               <Suspense>
                 <div className="text-center mb-12">
                   <h1 className="text-2xl md:text-3xl font-medium mb-2">{greetings}</h1>
-                  <p className="text-gray-400 text-lg font-DontWorry md:text-2xl">What's on your mind?</p>
+                  <p className="text-gray-500 text-lg font-DontWorry md:text-2xl">What's on your mind?</p>
                 </div>
               </Suspense>
             </div>
