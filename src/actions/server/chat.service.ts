@@ -26,24 +26,42 @@ export class ChatService {
   private formatInstructions: string;
   private model: ChatGoogleGenerativeAI;
   private systemPrompts: Record<string, string>;
-  private embeddings: GoogleGenerativeAIEmbeddings;
-  private vectorStore: UpstashVectorStore;
+  private embeddings: GoogleGenerativeAIEmbeddings | null = null;
+  private vectorStore: UpstashVectorStore | null = null;
 
   constructor(model: ChatGoogleGenerativeAI, systemPrompts: Record<string, string>) {
     this.model = model;
     this.systemPrompts = systemPrompts;
     this.formatInstructions = this.outputParser.getFormatInstructions();
-    this.embeddings = new GoogleGenerativeAIEmbeddings({
-      model: "embedding-001",
-      apiKey: process.env.GOOGLE_API_KEY,
-    });
-    const indexWithCredentials = new Index({
-      url: process.env.UPSTASH_VECTOR_REST_URL!,
-      token: process.env.UPSTASH_VECTOR_REST_TOKEN!,
-    });
-    this.vectorStore = new UpstashVectorStore(this.embeddings, {
-      index: indexWithCredentials,
-    });
+
+    // Initialize embeddings with error handling
+    try {
+      this.embeddings = new GoogleGenerativeAIEmbeddings({
+        model: "embedding-001",
+        apiKey: process.env.GOOGLE_API_KEY,
+      });
+    } catch (error) {
+      console.warn("Failed to initialize Google embeddings:", error);
+      this.embeddings = null;
+    }
+
+    // Initialize vector store with error handling
+    try {
+      if (this.embeddings && process.env.UPSTASH_VECTOR_REST_URL && process.env.UPSTASH_VECTOR_REST_TOKEN) {
+        const indexWithCredentials = new Index({
+          url: process.env.UPSTASH_VECTOR_REST_URL,
+          token: process.env.UPSTASH_VECTOR_REST_TOKEN,
+        });
+        this.vectorStore = new UpstashVectorStore(this.embeddings, {
+          index: indexWithCredentials,
+        });
+      } else {
+        console.warn("Upstash Vector credentials not found, vector search disabled");
+      }
+    } catch (error) {
+      console.warn("Failed to initialize Upstash Vector Store:", error);
+      this.vectorStore = null;
+    }
   }
 
   private cleanPromptText(text: string): string {
@@ -74,20 +92,34 @@ export class ChatService {
     const conversation = await prisma.conversation.create({
       data: { content, role, chatId },
     });
-    await this.vectorStore.addDocuments([
-      {
-        pageContent: content,
-        metadata: {
-          chatId,
-          role,
-          messageId: conversation.id,
-          timestamp: conversation.timestamp.toISOString(),
-        },
-      },
-    ]);
+
+    // Try to add to vector store, but don't fail if unavailable
+    if (this.vectorStore) {
+      try {
+        await this.vectorStore.addDocuments([
+          {
+            pageContent: content,
+            metadata: {
+              chatId,
+              role,
+              messageId: conversation.id,
+              timestamp: conversation.timestamp.toISOString(),
+            },
+          },
+        ]);
+      } catch (error) {
+        console.warn("Failed to add document to vector store:", error);
+      }
+    }
   }
 
   private async getRelevantChatHistory(chatId: string, userInput: string, limit: number = 5): Promise<string> {
+    // Skip vector search if vector store is not available
+    if (!this.vectorStore) {
+      console.warn("Vector store not available, skipping relevant history retrieval");
+      return "";
+    }
+
     try {
       const filterString = `chatId = "${chatId}"`;
       const vectorSearchResults = await this.vectorStore.similaritySearch(userInput, limit, filterString);
@@ -98,7 +130,7 @@ export class ChatService {
       }
       return formattedContext;
     } catch (error) {
-      console.error("Error retrieving chat history:", error);
+      console.warn("Error retrieving chat history:", error);
       return "";
     }
   }
@@ -114,26 +146,46 @@ export class ChatService {
     const chat = chatId
       ? await prisma.chat.findUnique({ where: { id: chatId } })
       : await prisma.chat.create({
-          data: { title: userInput.substring(0, 50) + "...", userId },
-        });
+        data: { title: userInput.substring(0, 50) + "...", userId },
+      });
 
     if (!chat) throw new Error("Chat not found");
 
-    const upstashMessageHistory = new UpstashRedisChatMessageHistory({
-      sessionId: chat.id,
-      config: {
-        url: process.env.UPSTASH_REDIS_REST_URL!, // Corrected variable name
-        token: process.env.UPSTASH_REDIS_REST_TOKEN!, // Corrected variable name
-      },
-    });
+    let upstashMessageHistory: UpstashRedisChatMessageHistory | null = null;
+    let trimmedHistory: any[] = [];
+
+    // Try to initialize Upstash Redis message history
+    if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
+      try {
+        upstashMessageHistory = new UpstashRedisChatMessageHistory({
+          sessionId: chat.id,
+          config: {
+            url: process.env.UPSTASH_REDIS_REST_URL,
+            token: process.env.UPSTASH_REDIS_REST_TOKEN,
+          },
+        });
+        // Test the connection by getting messages
+        const allMessages = await upstashMessageHistory.getMessages();
+        trimmedHistory = allMessages.slice(-3);
+      } catch (error) {
+        console.warn("Failed to connect to Upstash Redis:", error);
+        upstashMessageHistory = null;
+      }
+    } else {
+      console.warn("Upstash Redis credentials not found, chat history disabled");
+    }
 
     // Generate name for untitled chat
     if (chat.title === "Untitled Chat") {
-      const title = await this.generateTitle(userInput);
-      await prisma.chat.update({
-        where: { id: chat.id },
-        data: { title: title.slice(0, 10) + "..." },
-      });
+      try {
+        const title = await this.generateTitle(userInput);
+        await prisma.chat.update({
+          where: { id: chat.id },
+          data: { title: title.slice(0, 10) + "..." },
+        });
+      } catch (error) {
+        console.warn("Failed to generate title:", error);
+      }
     }
 
     const relevantHistory = await this.getRelevantChatHistory(chat.id, userInput);
@@ -141,17 +193,6 @@ export class ChatService {
     // Save user input to vector store
     await this.saveConversation(chat.id, userInput, "user");
 
-    const memory = new BufferMemory({
-      memoryKey: "history",
-      chatHistory: upstashMessageHistory,
-      returnMessages: true,
-      outputKey: "response",
-      inputKey: "input",
-    });
-
-    // Trim history to last 3 messages, but don’t clear everything
-    const allMessages = await upstashMessageHistory.getMessages();
-    const trimmedHistory = allMessages.slice(-3); 
 
     const updatedSystemPrompt = this.getUpdatedSystemPrompts()[promptType];
     const systemTemplate = `${updatedSystemPrompt}\n\nHere is relevant conversation history:\n${relevantHistory}`;
@@ -167,9 +208,6 @@ export class ChatService {
     const fullResponse: string[] = [];
 
     try {
-      // Load current history from memory (includes trimmed history)
-      const { history } = await memory.loadMemoryVariables({});
-
       // Format the prompt with user input and history
       const formattedPrompt = await prompt.format({ input: userInput, history: trimmedHistory });
       const streamResponse = await this.model.stream(formattedPrompt);
@@ -205,11 +243,15 @@ export class ChatService {
         // Save assistant response to vector store
         await this.saveConversation(chat.id, formattedMarkdown, "assistant");
 
-        // Save the input and output to memory (and thus to Upstash Redis)
-        await memory.saveContext(
-          { input: userInput },
-          { response: formattedMarkdown }
-        );
+        // Save the input and output to memory (and thus to Upstash Redis) if available
+        if (upstashMessageHistory) {
+          try {
+            await upstashMessageHistory.addMessage(new HumanMessage(userInput));
+            await upstashMessageHistory.addMessage(new AIMessage(formattedMarkdown));
+          } catch (error) {
+            console.warn("Failed to save to Upstash Redis:", error);
+          }
+        }
 
       } catch (parseError) {
         console.error("Error parsing response:", parseError);
@@ -218,22 +260,30 @@ export class ChatService {
         )}\n**Follow-up Questions:**\n- None`;
         await this.saveConversation(chat.id, fallbackResponse, "assistant");
 
-        // Save the fallback response to memory
-        await memory.saveContext(
-          { input: userInput },
-          { response: fallbackResponse }
-        );
+        // Save the fallback response to memory if available
+        if (upstashMessageHistory) {
+          try {
+            await upstashMessageHistory.addMessage(new HumanMessage(userInput));
+            await upstashMessageHistory.addMessage(new AIMessage(fallbackResponse));
+          } catch (error) {
+            console.warn("Failed to save to Upstash Redis:", error);
+          }
+        }
       }
     } catch (error) {
       console.error("Streaming error:", error);
       const errorResponse = `**Heading:** Error\n**Steps:**\n- Internal server error occurred\n**Prompt:** Unable to process request\n**Follow-up Questions:**\n- None`;
       await this.saveConversation(chat.id, errorResponse, "assistant");
 
-      // Save the error response to memory
-      await memory.saveContext(
-        { input: userInput },
-        { response: errorResponse }
-      );
+      // Save the error response to memory if available
+      if (upstashMessageHistory) {
+        try {
+          await upstashMessageHistory.addMessage(new HumanMessage(userInput));
+          await upstashMessageHistory.addMessage(new AIMessage(errorResponse));
+        } catch (error) {
+          console.warn("Failed to save to Upstash Redis:", error);
+        }
+      }
       stream.write(errorResponse);
       stream.end();
     }
